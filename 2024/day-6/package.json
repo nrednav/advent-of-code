@@ -1,0 +1,13 @@
+{
+  "name": "day-6",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "main": "node main.mjs input.txt",
+    "test": "node main.mjs test-input.txt"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
