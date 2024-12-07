@@ -63,32 +63,45 @@ class Guard {
         direction: currentDirection,
       });
 
-      const nextDirection = this.getNextDirection({
-        currentDirection: currentDirection,
-      });
-
-      const nextAdjacentPosition = this.getNextPosition({
-        currentPosition: nextPosition,
-        direction: nextDirection,
-      });
-
       const nextPositionSeenBefore = this.positionsVisited.has(
         Object.values(nextPosition).join(","),
       );
 
-      const nextAdjacentPositionSeenBefore = this.positionsVisited.has(
-        Object.values(nextAdjacentPosition).join(","),
-      );
+      if (nextPositionSeenBefore) {
+        obstructionCandidates.add(
+          this.getNextPosition({
+            currentPosition: nextPosition,
+            direction: currentDirection,
+          }),
+        );
+      }
 
-      console.log({
-        currentPosition,
-        currentDirection,
-        nextPosition,
-        nextDirection,
-        nextAdjacentPosition,
-        nextPositionSeenBefore,
-        nextAdjacentPositionSeenBefore,
-      });
+      // const nextDirection = this.getNextDirection({
+      //   currentDirection: currentDirection,
+      // });
+      //
+      // const nextAdjacentPosition = this.getNextPosition({
+      //   currentPosition: nextPosition,
+      //   direction: nextDirection,
+      // });
+      //
+      // const nextPositionSeenBefore = this.positionsVisited.has(
+      //   Object.values(nextPosition).join(","),
+      // );
+      //
+      // const nextAdjacentPositionSeenBefore = this.positionsVisited.has(
+      //   Object.values(nextAdjacentPosition).join(","),
+      // );
+      //
+      // console.log({
+      //   currentPosition,
+      //   currentDirection,
+      //   nextPosition,
+      //   nextDirection,
+      //   nextAdjacentPosition,
+      //   nextPositionSeenBefore,
+      //   nextAdjacentPositionSeenBefore,
+      // });
     }
 
     return obstructionCandidates;
