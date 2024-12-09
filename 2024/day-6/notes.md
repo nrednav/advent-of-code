@@ -23,7 +23,6 @@ obstruction candidates:
 	-> to last obstacle = +1, -2
 ```
 
-
 obstacle coordinates:
 
 ```

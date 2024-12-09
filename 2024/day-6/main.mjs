@@ -16,12 +16,65 @@ class Guard {
         direction: this.direction,
       }),
     ];
+    this.obstaclePositions = this.findObstaclePositions();
+
+    this.obstaclesSeen = [];
+    this.obstacleCandidates = new Set();
 
     // console.log({
     //   map: this.map.map((row) => row.join("")).join("\n"),
     //   startingPosition: this.currentPosition,
     //   direction: this.direction,
     // });
+  }
+
+  findObstaclePositions() {
+    const obstaclePositions = new Set();
+
+    for (let row = 0; row < this.map.length; row++) {
+      for (let col = 0; col < this.map[row].length; col++) {
+        const cell = this.map[row][col];
+
+        if (cell === "#") {
+          const position = { row, col };
+
+          obstaclePositions.add(Object.values(position).join(","));
+        }
+      }
+    }
+
+    return obstaclePositions;
+  }
+
+  isPositionInlineWithObstacle({ position, currentDirection }) {
+    let currentPosition = position;
+    let cell = this.map[currentPosition.row][currentPosition.col];
+
+    do {
+      const nextPosition = this.getNextPosition({
+        currentPosition,
+        direction: this.getNextDirection({ currentDirection }),
+      });
+
+      if (
+        nextPosition.row >= this.map.length ||
+        nextPosition.col >= this.map.length ||
+        nextPosition.row < 0 ||
+        nextPosition.col < 0
+      ) {
+        break;
+      }
+
+      cell = this.map[nextPosition.row][nextPosition.col];
+
+      if (cell === "#") {
+        return true;
+      }
+
+      currentPosition = nextPosition;
+    } while (cell !== "#" || cell !== undefined);
+
+    return false;
   }
 
   move() {
@@ -34,8 +87,46 @@ class Guard {
       this.direction = this.getNextDirection({
         currentDirection: this.direction,
       });
+
+      this.obstaclePositions.add(Object.values(nextPosition).join(","));
+      this.obstaclesSeen.push(nextPosition);
     } else {
       this.currentPosition = nextPosition;
+
+      const positionIsInlineWithObstacle = this.isPositionInlineWithObstacle({
+        position: this.currentPosition,
+        currentDirection: this.direction,
+        obstaclePositions: this.obstaclePositions,
+      });
+
+      console.log(this.currentPosition, positionIsInlineWithObstacle);
+
+      if (this.obstaclesSeen.length >= 3) {
+        const thirdLastObstacle =
+          this.obstaclesSeen[this.obstaclesSeen.length - 3];
+        const secondLastObstacle =
+          this.obstaclesSeen[this.obstaclesSeen.length - 2];
+        const lastObstacle = this.obstaclesSeen[this.obstaclesSeen.length - 1];
+
+        const candidateObstaclePosition = this.getNextPosition({
+          currentPosition: this.currentPosition,
+          direction: this.direction,
+        });
+
+        const gradientA =
+          Math.abs(thirdLastObstacle.row - secondLastObstacle.row) /
+          Math.abs(thirdLastObstacle.col - secondLastObstacle.col);
+        const gradientB =
+          Math.abs(lastObstacle.row - candidateObstaclePosition.row) /
+          Math.abs(lastObstacle.col - candidateObstaclePosition.col);
+
+        console.log({ gradientA, gradientB });
+
+        if (gradientA === gradientB && positionIsInlineWithObstacle) {
+          this.obstacleCandidates.add(candidateObstaclePosition);
+        }
+      }
+
       this.positionsVisited.add(Object.values(this.currentPosition).join(","));
       this.allPositionsVisited.push(
         this.serializePosition({
@@ -45,66 +136,6 @@ class Guard {
       );
       this.map[this.currentPosition.row][this.currentPosition.col] = "x";
     }
-  }
-
-  findObstructionCandidates() {
-    const obstructionCandidates = new Set();
-
-    for (const positionVisited of this.allPositionsVisited) {
-      const [serializedCurrentPosition, currentDirection] =
-        positionVisited.split("|");
-
-      const currentPosition = this.deserializePosition(
-        serializedCurrentPosition,
-      );
-
-      const nextPosition = this.getNextPosition({
-        currentPosition: currentPosition,
-        direction: currentDirection,
-      });
-
-      const nextPositionSeenBefore = this.positionsVisited.has(
-        Object.values(nextPosition).join(","),
-      );
-
-      if (nextPositionSeenBefore) {
-        obstructionCandidates.add(
-          this.getNextPosition({
-            currentPosition: nextPosition,
-            direction: currentDirection,
-          }),
-        );
-      }
-
-      // const nextDirection = this.getNextDirection({
-      //   currentDirection: currentDirection,
-      // });
-      //
-      // const nextAdjacentPosition = this.getNextPosition({
-      //   currentPosition: nextPosition,
-      //   direction: nextDirection,
-      // });
-      //
-      // const nextPositionSeenBefore = this.positionsVisited.has(
-      //   Object.values(nextPosition).join(","),
-      // );
-      //
-      // const nextAdjacentPositionSeenBefore = this.positionsVisited.has(
-      //   Object.values(nextAdjacentPosition).join(","),
-      // );
-      //
-      // console.log({
-      //   currentPosition,
-      //   currentDirection,
-      //   nextPosition,
-      //   nextDirection,
-      //   nextAdjacentPosition,
-      //   nextPositionSeenBefore,
-      //   nextAdjacentPositionSeenBefore,
-      // });
-    }
-
-    return obstructionCandidates;
   }
 
   serializePosition({ position, direction }) {
@@ -139,6 +170,8 @@ class Guard {
       positionsVisited: this.positionsVisited,
       map: this.map.map((row) => row.join("")).join("\n"),
       allPositionsVisited: this.allPositionsVisited,
+      obstacleCandidates: this.obstacleCandidates,
+      obstaclesSeen: this.obstaclesSeen,
     };
   }
 
@@ -213,10 +246,7 @@ const main = () => {
   // Part 2
   const route = guard.traceRoute();
 
-  const obstructionCandidates = guard.findObstructionCandidates();
-
   console.log(route);
-  console.log(obstructionCandidates);
 };
 
 main();
