@@ -1,5 +1,34 @@
 import fs from "node:fs";
 
+class Obstacle {
+  constructor({ position, nextObstacle = null }) {
+    this.position = position;
+    this.nextObstacle = nextObstacle;
+  }
+
+  getNextObstacle() {
+    return this.nextObstacle;
+  }
+
+  setNextObstacle(obstacle) {
+    this.nextObstacle = obstacle;
+  }
+
+  getPosition() {
+    return this.position;
+  }
+
+  positionEquals(position) {
+    if (!this.position || !position) {
+      return false;
+    }
+
+    return (
+      this.position.row === position.row && this.position.col === position.col
+    );
+  }
+}
+
 class Guard {
   constructor({ input }) {
     this.map = input
@@ -19,7 +48,7 @@ class Guard {
     this.obstaclePositions = this.findObstaclePositions();
 
     this.obstaclesSeen = [];
-    this.obstacleCandidates = new Set();
+    this.candidateObstacles = new Set();
 
     // console.log({
     //   map: this.map.map((row) => row.join("")).join("\n"),
@@ -46,14 +75,25 @@ class Guard {
     return obstaclePositions;
   }
 
-  isPositionInlineWithObstacle({ position, currentDirection }) {
-    let currentPosition = position;
-    let cell = this.map[currentPosition.row][currentPosition.col];
+  getPerpendicularObstacle({ currentPosition, currentDirection }) {
+    console.log("getPerpendicularObstacle -- start");
 
-    do {
+    const currentCell = this.map[currentPosition.row][currentPosition.col];
+
+    if (currentCell === "#") {
+      return null;
+    }
+
+    const perpendicularDirection = this.getNextDirection({ currentDirection });
+
+    console.log({ perpendicularDirection });
+
+    let perpendicularObstacle = null;
+
+    for (let i = 0; i < this.map.length; i++) {
       const nextPosition = this.getNextPosition({
         currentPosition,
-        direction: this.getNextDirection({ currentDirection }),
+        direction: perpendicularDirection,
       });
 
       if (
@@ -65,17 +105,59 @@ class Guard {
         break;
       }
 
-      cell = this.map[nextPosition.row][nextPosition.col];
+      const nextCell = this.map[nextPosition.row][nextPosition.col];
 
-      if (cell === "#") {
-        return true;
+      if (nextCell === "#") {
+        perpendicularObstacle =
+          this.obstaclesSeen.find((obstacle) =>
+            obstacle.positionEquals(nextPosition),
+          ) ?? new Obstacle({ position: nextPosition });
+        break;
       }
 
       currentPosition = nextPosition;
-    } while (cell !== "#" || cell !== undefined);
+    }
 
-    return false;
+    console.log("getPerpendicularObstacle -- finish");
+
+    return perpendicularObstacle;
   }
+
+  // isPositionInlineWithObstacle({ position, currentDirection }) {
+  //   let currentPosition = position;
+  //   let cell = this.map[currentPosition.row][currentPosition.col];
+  //
+  //   do {
+  //     const nextPosition = this.getNextPosition({
+  //       currentPosition,
+  //       direction: this.getNextDirection({ currentDirection }),
+  //     });
+  //
+  //     if (
+  //       nextPosition.row >= this.map.length ||
+  //       nextPosition.col >= this.map.length ||
+  //       nextPosition.row < 0 ||
+  //       nextPosition.col < 0
+  //     ) {
+  //       break;
+  //     }
+  //
+  //     cell = this.map[nextPosition.row][nextPosition.col];
+  //
+  //     if (
+  //       cell === "#" &&
+  //       this.obstaclesSeen.some((obstacle) =>
+  //         obstacle.positionEquals(nextPosition),
+  //       )
+  //     ) {
+  //       return { result: true, inlineObstacle: new Obstacle(nextPosition) };
+  //     }
+  //
+  //     currentPosition = nextPosition;
+  //   } while (cell !== "#" || cell !== undefined);
+  //
+  //   return { result: false };
+  // }
 
   move() {
     const nextPosition = this.getNextPosition({
@@ -83,63 +165,277 @@ class Guard {
       direction: this.direction,
     });
 
-    if (this.map[nextPosition.row][nextPosition.col] === "#") {
+    const nextCell = this.map[nextPosition.row][nextPosition.col];
+
+    if (nextCell === "#") {
+      // Turn 90 degrees clockwise
       this.direction = this.getNextDirection({
         currentDirection: this.direction,
       });
 
-      this.obstaclePositions.add(Object.values(nextPosition).join(","));
-      this.obstaclesSeen.push(nextPosition);
+      // Record having seen the obstacle
+      const obstacle = new Obstacle({ position: nextPosition });
+
+      const previousObstacle =
+        this.obstaclesSeen[this.obstaclesSeen.length - 1];
+
+      if (previousObstacle) {
+        previousObstacle.setNextObstacle(obstacle);
+      }
+
+      this.obstaclesSeen.push(obstacle);
     } else {
+      const previousPosition = this.currentPosition;
+
+      // Move to next cell
       this.currentPosition = nextPosition;
 
-      const positionIsInlineWithObstacle = this.isPositionInlineWithObstacle({
-        position: this.currentPosition,
+      // Check if next position is a candidate for placing an obstacle to loop
+      const perpendicularObstacle = this.getPerpendicularObstacle({
+        currentPosition: previousPosition,
         currentDirection: this.direction,
-        obstaclePositions: this.obstaclePositions,
       });
 
-      console.log(this.currentPosition, positionIsInlineWithObstacle);
+      console.log({
+        previousPosition,
+        nextPosition,
+        currentPosition: this.currentPosition,
+        perpendicularObstacle,
+      });
 
-      if (this.obstaclesSeen.length >= 3) {
-        const thirdLastObstacle =
-          this.obstaclesSeen[this.obstaclesSeen.length - 3];
-        const secondLastObstacle =
-          this.obstaclesSeen[this.obstaclesSeen.length - 2];
-        const lastObstacle = this.obstaclesSeen[this.obstaclesSeen.length - 1];
-
-        const candidateObstaclePosition = this.getNextPosition({
-          currentPosition: this.currentPosition,
-          direction: this.direction,
+      if (perpendicularObstacle && perpendicularObstacle.getNextObstacle()) {
+        const candidateObstacle = new Obstacle({
+          position: this.currentPosition,
+          nextObstacle: perpendicularObstacle,
         });
 
-        const gradientA =
-          Math.abs(thirdLastObstacle.row - secondLastObstacle.row) /
-          Math.abs(thirdLastObstacle.col - secondLastObstacle.col);
-        const gradientB =
-          Math.abs(lastObstacle.row - candidateObstaclePosition.row) /
-          Math.abs(lastObstacle.col - candidateObstaclePosition.col);
+        this.candidateObstacles.add(
+          this.serializePosition({ position: candidateObstacle.getPosition() }),
+        );
 
-        console.log({ gradientA, gradientB });
-
-        if (gradientA === gradientB && positionIsInlineWithObstacle) {
-          this.obstacleCandidates.add(candidateObstaclePosition);
-        }
+        this.map[candidateObstacle.getPosition().row][
+          candidateObstacle.getPosition().col
+        ] = "o";
+      } else {
+        this.map[this.currentPosition.row][this.currentPosition.col] = "x";
       }
 
       this.positionsVisited.add(Object.values(this.currentPosition).join(","));
+
       this.allPositionsVisited.push(
         this.serializePosition({
           position: this.currentPosition,
           direction: this.direction,
         }),
       );
-      this.map[this.currentPosition.row][this.currentPosition.col] = "x";
     }
   }
 
+  // if (this.map[nextPosition.row][nextPosition.col] === "#") {
+  //   this.direction = this.getNextDirection({
+  //     currentDirection: this.direction,
+  //   });
+  //
+  //   const obstacle = new Obstacle({ position: nextPosition });
+  //
+  //   const prevObstacle = this.obstaclesSeen[this.obstaclesSeen.length - 1];
+  //
+  //   if (prevObstacle) {
+  //     prevObstacle.setNextObstacle(obstacle);
+  //   }
+  //
+  //   this.obstaclesSeen.push(obstacle);
+  //
+  //   console.log({ obstaclesSeen: this.obstaclesSeen });
+  //
+  //   this.obstaclePositions.add(Object.values(nextPosition).join(","));
+  //   // this.obstaclesSeen.push(nextPosition);
+  // } else {
+  //   this.currentPosition = nextPosition;
+  //
+  //   const positionIsInlineWithObstacle = this.isPositionInlineWithObstacle({
+  //     position: this.currentPosition,
+  //     currentDirection: this.direction,
+  //     obstaclePositions: this.obstaclePositions,
+  //   });
+  //
+  //   if (
+  //     this.obstaclesSeen.length >= 3 &&
+  //     positionIsInlineWithObstacle.result
+  //   ) {
+  //     const thirdLastObstacle =
+  //       this.obstaclesSeen[this.obstaclesSeen.length - 3];
+  //     const secondLastObstacle =
+  //       this.obstaclesSeen[this.obstaclesSeen.length - 2];
+  //     const lastObstacle = this.obstaclesSeen[this.obstaclesSeen.length - 1];
+  //
+  //     // const candidateObstaclePosition = this.getNextPosition({
+  //     //   currentPosition: this.currentPosition,
+  //     //   direction: this.direction,
+  //     // });
+  //
+  //     if (positionIsInlineWithObstacle.result) {
+  //       const nextObstacle = this.obstaclesSeen.find((obstacle) => {
+  //         const nextObstacleSeen = this.obstaclePositions.some(
+  //           (obstaclePosition) => {
+  //             const displacementType =
+  //               this.direction === "^" || this.direction === "v"
+  //                 ? "vertical"
+  //                 : "horizontal";
+  //
+  //             if (displacementType === "vertical") {
+  //               return (
+  //                 Math.abs(
+  //                   positionIsInlineWithObstacle.inlineObstacle.getPosition()
+  //                     .col - obstaclePosition.col,
+  //                 ) === 1 &&
+  //                 obstaclePosition.row >
+  //                   positionIsInlineWithObstacle.inlineObstacle.row
+  //               );
+  //             } else {
+  //               return (
+  //                 Math.abs(
+  //                   positionIsInlineWithObstacle.inlineObstacle.getPosition()
+  //                     .row - obstaclePosition.row,
+  //                 ) === 1 &&
+  //                 obstaclePosition.col >
+  //                   positionIsInlineWithObstacle.inlineObstacle.col
+  //               );
+  //             }
+  //           },
+  //         );
+  //
+  //         return nextObstacleSeen;
+  //       });
+  //
+  //       if (nextObstacle) {
+  //         positionIsInlineWithObstacle.inlineObstacle.setNextObstacle(
+  //           secondLastObstacle,
+  //         );
+  //       }
+  //
+  //       if (
+  //         Math.abs(
+  //           positionIsInlineWithObstacle.inlineObstacle.getPosition().row -
+  //             secondLastObstacle.getPosition().row,
+  //         ) === 1 ||
+  //         Math.abs(
+  //           positionIsInlineWithObstacle.inlineObstacle.getPosition().col -
+  //             secondLastObstacle.getPosition().col,
+  //         ) === 1
+  //       ) {
+  //         positionIsInlineWithObstacle.inlineObstacle.setNextObstacle(
+  //           secondLastObstacle,
+  //         );
+  //       }
+  //     }
+  //
+  //     const candidateObstacle = new Obstacle(
+  //       this.getNextPosition({
+  //         currentPosition: this.currentPosition,
+  //         direction: this.direction,
+  //       }),
+  //     );
+  //
+  //     candidateObstacle.setNextObstacle(
+  //       positionIsInlineWithObstacle.inlineObstacle,
+  //     );
+  //
+  //     if (
+  //       this.obstaclePositions.has(
+  //         Object.values(candidateObstacle.getPosition()).join(","),
+  //       ) ||
+  //       candidateObstacle.getPosition().row >= this.map.length ||
+  //       candidateObstacle.getPosition().col >= this.map.length
+  //     ) {
+  //       return;
+  //     }
+  //
+  //     console.log({
+  //       thirdLastObstacle,
+  //       secondLastObstacle,
+  //       lastObstacle,
+  //       candidateObstacle,
+  //       inlineObstacle: positionIsInlineWithObstacle.inlineObstacle,
+  //     });
+  //
+  //     const displacementType =
+  //       this.direction === "^" || this.direction === "v"
+  //         ? "vertical"
+  //         : "horizontal";
+  //
+  //     const displacementA =
+  //       displacementType === "vertical"
+  //         ? Math.abs(
+  //             secondLastObstacle.getPosition().row -
+  //               positionIsInlineWithObstacle.inlineObstacle.getPosition().row,
+  //           )
+  //         : Math.abs(
+  //             secondLastObstacle.getPosition().col -
+  //               positionIsInlineWithObstacle.inlineObstacle.getPosition().col,
+  //           );
+  //
+  //     const displacementB =
+  //       displacementType === "vertical"
+  //         ? Math.abs(
+  //             candidateObstacle.getPosition().row -
+  //               lastObstacle.getPosition().row,
+  //           )
+  //         : Math.abs(
+  //             candidateObstacle.getPosition().col -
+  //               lastObstacle.getPosition().col,
+  //           );
+  //
+  //     console.log({
+  //       displacementType,
+  //       displacementA,
+  //       displacementB,
+  //     });
+  //
+  //     // if (gradientA === gradientB && positionIsInlineWithObstacle.result) {
+  //     if (
+  //       positionIsInlineWithObstacle.result &&
+  //       displacementA === displacementB &&
+  //       this.obstaclesSeen.some((obstacle) =>
+  //         obstacle.positionEquals(
+  //           positionIsInlineWithObstacle.inlineObstacle
+  //             .getNextObstacle()
+  //             ?.getPosition(),
+  //         ),
+  //       )
+  //       // this.obstaclesSeen.some(
+  //       //   (obstacle) =>
+  //       //     obstacle.getPosition().row ===
+  //       //       positionIsInlineWithObstacle.inlineObstaclePosition.row &&
+  //       //     obstacle.getPosition().col ===
+  //       //       positionIsInlineWithObstacle.inlineObstaclePosition.col,
+  //       // )
+  //     ) {
+  //       this.obstacleCandidates.add(candidateObstacle);
+  //       console.log("added");
+  //     } else {
+  //       console.log("rejected");
+  //     }
+  //   }
+  //
+  //   this.positionsVisited.add(Object.values(this.currentPosition).join(","));
+  //   this.allPositionsVisited.push(
+  //     this.serializePosition({
+  //       position: this.currentPosition,
+  //       direction: this.direction,
+  //     }),
+  //   );
+  //   this.map[this.currentPosition.row][this.currentPosition.col] = "x";
+  // }
+
   serializePosition({ position, direction }) {
-    return Object.values(position).join(",").concat(`|${direction}`);
+    const serializedPosition = Object.values(position).join(",");
+
+    if (direction) {
+      return serializedPosition.concat(`|${direction}`);
+    }
+
+    return serializedPosition;
   }
 
   deserializePosition(serializedPosition) {
@@ -170,7 +466,7 @@ class Guard {
       positionsVisited: this.positionsVisited,
       map: this.map.map((row) => row.join("")).join("\n"),
       allPositionsVisited: this.allPositionsVisited,
-      obstacleCandidates: this.obstacleCandidates,
+      candidateObstacles: Array.from(this.candidateObstacles),
       obstaclesSeen: this.obstaclesSeen,
     };
   }
@@ -247,6 +543,8 @@ const main = () => {
   const route = guard.traceRoute();
 
   console.log(route);
+  console.log(route.map);
+  console.log(route.candidateObstacles.length);
 };
 
 main();
